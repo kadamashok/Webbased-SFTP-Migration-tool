@@ -1,0 +1,10 @@
+app:
+  host: 0.0.0.0
+  port: 8000
+migration:
+  default_sftp_group: sftpusers
+  incremental: true
+  rsync_delete: false
+security:
+  credentials_in_memory_only: true
+  strict_host_key_checking: false

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SFTP Migration Tool</title>
+  <style>
+    :root {
+      --bg: #f5f7f6;
+      --card: #ffffff;
+      --primary: #00a651;
+      --primary-dark: #008b44;
+      --text: #1f2937;
+      --danger: #b42318;
+      --ok: #067647;
+      --border: #d1d5db;
+      --muted: #6b7280;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      background: #111111;
+      border-bottom: 3px solid var(--primary);
+      height: 56px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .brand-logo {
+      height: 32px;
+      max-height: 36px;
+      width: auto;
+      object-fit: contain;
+      display: block;
+      flex: 0 0 auto;
+    }
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #f9fafb;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .container { max-width: 1180px; margin: 18px auto; padding: 0 12px 16px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    }
+    h2 { margin: 0 0 10px; font-size: 1.02rem; color: #111827; }
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+    label { display: block; font-size: 0.86rem; margin-bottom: 4px; font-weight: 600; }
+    input, textarea, select {
+      width: 100%; box-sizing: border-box; border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; font-size: 0.92rem; background: #fff;
+    }
+    textarea { min-height: 76px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .actions-row { display: flex; justify-content: flex-start; gap: 10px; margin-top: 12px; }
+    button {
+      border: none; border-radius: 8px; padding: 10px 14px; color: #fff;
+      background: var(--primary); cursor: pointer; font-weight: 600; min-width: 210px;
+    }
+    button.secondary { background: #1f2937; }
+    button.warn { background: var(--primary-dark); }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .status { margin-top: 10px; font-weight: 600; }
+    .ok { color: var(--ok); }
+    .err { color: var(--danger); }
+    .summary {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 0.85rem;
+      background: #f9fafb;
+      white-space: pre-wrap;
+      color: #111827;
+    }
+    pre {
+      background: #111827; color: #e5e7eb; border-radius: 8px; padding: 12px;
+      max-height: 280px; overflow: auto; white-space: pre-wrap;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 0.84rem;
+    }
+    .progress { width: 100%; height: 12px; background: #e5e7eb; border-radius: 8px; overflow: hidden; }
+    .bar { height: 100%; background: linear-gradient(90deg, #00a651, #008b44); width: 0; transition: width 0.35s ease; }
+    .footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.84rem;
+      padding: 10px 8px 14px;
+    }
+    @media (max-width: 900px) {
+      .panels { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      button { min-width: 100%; }
+      .actions-row { flex-direction: column; }
+      .brand-logo { height: 28px; }
+      .brand-title { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <img src="/static/croma-logo.png" alt="Croma Logo" class="brand-logo" />
+    <div class="brand-title">Croma – SFTP Migration Tool</div>
+  </header>
+  <div class="container">
+    <div class="panels">
+      <div class="card">
+        <h2>Source Server</h2>
+        <div class="grid">
+          <div><label>IP / Hostname</label><input id="src_host" /></div>
+          <div><label>SSH Port</label><input id="src_port" value="22" /></div>
+          <div><label>Root / Sudo Username</label><input id="src_user" value="root" /></div>
+          <div><label>Password</label><input id="src_pass" type="password" /></div>
+          <div style="grid-column: span 2;"><label>SSH Private Key (optional)</label><textarea id="src_key"></textarea></div>
+        </div>
+        <div class="actions-row">
+          <button onclick="testSource()">Test Source Connectivity</button>
+        </div>
+        <div id="source_status" class="status"></div>
+        <div id="source_summary" class="summary"></div>
+      </div>
+
+      <div class="card">
+        <h2>Destination Server</h2>
+        <div class="grid">
+          <div><label>IP / Hostname</label><input id="dst_host" /></div>
+          <div><label>SSH Port</label><input id="dst_port" value="22" /></div>
+          <div><label>Root / Sudo Username</label><input id="dst_user" value="root" /></div>
+          <div><label>Password</label><input id="dst_pass" type="password" /></div>
+          <div style="grid-column: span 2;"><label>SSH Private Key (optional)</label><textarea id="dst_key"></textarea></div>
+        </div>
+        <div class="actions-row">
+          <button onclick="testDestination()">Test Destination Connectivity</button>
+        </div>
+        <div id="destination_status" class="status"></div>
+        <div id="destination_summary" class="summary"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Migration Options</h2>
+      <div class="grid" style="grid-template-columns: repeat(4, minmax(180px, 1fr));">
+        <div><label>SFTP Group</label><input id="sftp_group" value="sftpusers" /></div>
+        <div><label>Incremental Sync</label><select id="incremental"><option value="true">Yes</option><option value="false">No</option></select></div>
+        <div><label>Delete Extra Files on Destination</label><select id="rsync_delete"><option value="false">No</option><option value="true">Yes</option></select></div>
+        <div><label>Sample SFTP User (optional)</label><input id="sample_user" /></div>
+      </div>
+      <div class="actions-row">
+        <button class="secondary" onclick="runDry()">Dry Run Migration</button>
+        <button class="warn" id="start_btn" onclick="runMigration()" disabled>Start Migration</button>
+      </div>
+      <div id="status" class="status">Run SOURCE and DESTINATION connectivity tests first.</div>
+    </div>
+
+    <div class="card">
+      <label>Progress</label>
+      <div class="progress"><div class="bar" id="bar"></div></div>
+      <div id="detail" style="margin-top:8px;font-size:.9rem;"></div>
+      <label style="margin-top:10px;">Live Logs</label>
+      <pre id="logs"></pre>
+    </div>
+  </div>
+  <footer class="footer">Developed by Ashok Kadam using AI</footer>
+
+<script>
+const API = "http://127.0.0.1:8001";
+let polling = null;
+let sourceOk = false;
+let destinationOk = false;
+
+function updateStartButton() {
+  document.getElementById("start_btn").disabled = !(sourceOk && destinationOk);
+}
+
+function payload() {
+  const srcPass = document.getElementById("src_pass").value.trim();
+  const srcKey = document.getElementById("src_key").value.trim();
+  const dstPass = document.getElementById("dst_pass").value.trim();
+  const dstKey = document.getElementById("dst_key").value.trim();
+
+  return {
+    source: {
+      host: document.getElementById("src_host").value.trim(),
+      port: Number(document.getElementById("src_port").value),
+      username: document.getElementById("src_user").value.trim(),
+      password: srcPass || null,
+      private_key: srcKey || null,
+      sudo: true
+    },
+    destination: {
+      host: document.getElementById("dst_host").value.trim(),
+      port: Number(document.getElementById("dst_port").value),
+      username: document.getElementById("dst_user").value.trim(),
+      password: dstPass || null,
+      private_key: dstKey || null,
+      sudo: true
+    },
+    sftp_group: document.getElementById("sftp_group").value.trim(),
+    incremental: document.getElementById("incremental").value === "true",
+    rsync_delete: document.getElementById("rsync_delete").value === "true",
+    sample_sftp_user: document.getElementById("sample_user").value.trim() || null
+  };
+}
+
+async function call(path, method="POST", body=null) {
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: {"Content-Type": "application/json"},
+    body: body ? JSON.stringify(body) : null
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function setStatus(id, msg, ok=true) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = `status ${ok ? "ok" : "err"}`;
+}
+
+function setSummary(id, data) {
+  document.getElementById(id).textContent = [
+    `OS: ${data.os_release}`,
+    `SSH User: ${data.whoami}`,
+    `Access: ${data.access}`,
+    "Disk:",
+    data.disk_summary
+  ].join("\n");
+}
+
+async function testSource() {
+  sourceOk = false;
+  updateStartButton();
+  try {
+    setStatus("source_status", "Testing SOURCE...");
+    const r = await call("/test/source", "POST", payload());
+    sourceOk = !!r.ok;
+    setStatus("source_status", "SOURCE connectivity passed", true);
+    setSummary("source_summary", r);
+  } catch (e) {
+    setStatus("source_status", `SOURCE failed: ${e.message}`, false);
+    document.getElementById("source_summary").textContent = "";
+  }
+  updateStartButton();
+}
+
+async function testDestination() {
+  destinationOk = false;
+  updateStartButton();
+  try {
+    setStatus("destination_status", "Testing DESTINATION...");
+    const r = await call("/test/destination", "POST", payload());
+    destinationOk = !!r.ok;
+    setStatus("destination_status", "DESTINATION connectivity passed", true);
+    setSummary("destination_summary", r);
+  } catch (e) {
+    setStatus("destination_status", `DESTINATION failed: ${e.message}`, false);
+    document.getElementById("destination_summary").textContent = "";
+  }
+  updateStartButton();
+}
+
+function setGlobalStatus(msg, ok=true) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = `status ${ok ? "ok" : "err"}`;
+}
+
+async function runDry() {
+  await startJob("/migration/dry-run");
+}
+
+async function runMigration() {
+  if (!(sourceOk && destinationOk)) {
+    setGlobalStatus("Run SOURCE and DESTINATION tests successfully before migration.", false);
+    return;
+  }
+  await startJob("/migration/start");
+}
+
+async function startJob(endpoint) {
+  try {
+    setGlobalStatus("Starting migration job...");
+    const {job_id} = await call(endpoint, "POST", payload());
+    setGlobalStatus(`Job started: ${job_id}`, true);
+    if (polling) clearInterval(polling);
+    polling = setInterval(() => poll(job_id), 2000);
+    poll(job_id);
+  } catch (e) {
+    setGlobalStatus(`Job start failed: ${e.message}`, false);
+  }
+}
+
+async function poll(jobId) {
+  try {
+    const [status, logs] = await Promise.all([
+      call(`/migration/${jobId}/status`, "GET"),
+      call(`/migration/logs?job_id=${encodeURIComponent(jobId)}`, "GET")
+    ]);
+    document.getElementById("bar").style.width = `${status.progress}%`;
+    document.getElementById("detail").textContent = `${status.status.toUpperCase()} - ${status.detail}`;
+    document.getElementById("logs").textContent = logs.logs.join("\n");
+
+    if (["completed", "failed"].includes(status.status) && polling) {
+      clearInterval(polling);
+      polling = null;
+      setGlobalStatus(
+        status.status === "completed" ? "Migration completed" : `Migration failed: ${status.detail}`,
+        status.status === "completed"
+      );
+    }
+  } catch (e) {
+    setGlobalStatus(`Polling error: ${e.message}`, false);
+    if (polling) {
+      clearInterval(polling);
+      polling = null;
+    }
+  }
+}
+</script>
+</body>
+</html>
