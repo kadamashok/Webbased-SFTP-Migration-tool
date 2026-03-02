@@ -7,9 +7,22 @@ from dataclasses import dataclass
 from typing import Optional
 
 import paramiko
+from paramiko.ssh_exception import NoValidConnectionsError
 
 
 class SSHCommandError(RuntimeError):
+    pass
+
+
+class SSHAuthError(SSHCommandError):
+    pass
+
+
+class SSHNetworkError(SSHCommandError):
+    pass
+
+
+class SSHConnectionError(SSHCommandError):
     pass
 
 
@@ -71,8 +84,12 @@ class SSHClientWrapper:
                 timeout=self.timeout,
                 banner_timeout=self.timeout,
             )
-        except (paramiko.SSHException, socket.error) as exc:
-            raise SSHCommandError(f"SSH connection failed to {self.host}:{self.port}: {exc}") from exc
+        except paramiko.AuthenticationException as exc:
+            raise SSHAuthError("Authentication failed") from exc
+        except (socket.timeout, TimeoutError, NoValidConnectionsError, socket.gaierror, OSError) as exc:
+            raise SSHNetworkError("Unable to reach server") from exc
+        except paramiko.SSHException as exc:
+            raise SSHConnectionError("SSH connection failed") from exc
 
     def run(self, command: str, sudo: bool = False, check: bool = True) -> SSHResult:
         if not self.client:

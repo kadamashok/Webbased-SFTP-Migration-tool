@@ -224,13 +224,63 @@ function payload() {
   };
 }
 
+function serverPayload(side) {
+  if (side === "source") {
+    return {
+      host: document.getElementById("src_host").value.trim(),
+      port: Number(document.getElementById("src_port").value),
+      username: document.getElementById("src_user").value.trim(),
+      password: document.getElementById("src_pass").value.trim() || null,
+      private_key: document.getElementById("src_key").value.trim() || null,
+      sudo: true
+    };
+  }
+
+  return {
+    host: document.getElementById("dst_host").value.trim(),
+    port: Number(document.getElementById("dst_port").value),
+    username: document.getElementById("dst_user").value.trim(),
+    password: document.getElementById("dst_pass").value.trim() || null,
+    private_key: document.getElementById("dst_key").value.trim() || null,
+    sudo: true
+  };
+}
+
+function validateServerInputs(side) {
+  const label = side === "source" ? "Source" : "Destination";
+  const data = serverPayload(side);
+
+  if (!data.host || /\s/.test(data.host)) {
+    return `Enter valid ${label} IP or Hostname`;
+  }
+  if (!data.username) {
+    return `Enter ${label} username`;
+  }
+  if (!data.password && !data.private_key) {
+    return `Enter ${label} password or SSH key`;
+  }
+  return "";
+}
+
 async function call(path, method="POST", body=null) {
   const res = await fetch(`${API}${path}`, {
     method,
     headers: {"Content-Type": "application/json"},
     body: body ? JSON.stringify(body) : null
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    let message = "Request failed.";
+    try {
+      const data = await res.json();
+      if (data && typeof data.detail === "string") {
+        message = data.detail;
+      }
+    } catch {
+      const text = await res.text();
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
   return res.json();
 }
 
@@ -253,9 +303,15 @@ function setSummary(id, data) {
 async function testSource() {
   sourceOk = false;
   updateStartButton();
+  const validation = validateServerInputs("source");
+  if (validation) {
+    setStatus("source_status", `SOURCE failed: ${validation}`, false);
+    document.getElementById("source_summary").textContent = "";
+    return;
+  }
   try {
     setStatus("source_status", "Testing SOURCE...");
-    const r = await call("/test/source", "POST", payload());
+    const r = await call("/test/source", "POST", serverPayload("source"));
     sourceOk = !!r.ok;
     setStatus("source_status", "SOURCE connectivity passed", true);
     setSummary("source_summary", r);
@@ -269,9 +325,15 @@ async function testSource() {
 async function testDestination() {
   destinationOk = false;
   updateStartButton();
+  const validation = validateServerInputs("destination");
+  if (validation) {
+    setStatus("destination_status", `DESTINATION failed: ${validation}`, false);
+    document.getElementById("destination_summary").textContent = "";
+    return;
+  }
   try {
     setStatus("destination_status", "Testing DESTINATION...");
-    const r = await call("/test/destination", "POST", payload());
+    const r = await call("/test/destination", "POST", serverPayload("destination"));
     destinationOk = !!r.ok;
     setStatus("destination_status", "DESTINATION connectivity passed", true);
     setSummary("destination_summary", r);

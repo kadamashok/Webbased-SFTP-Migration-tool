@@ -3,71 +3,54 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from dataclasses import dataclass
 
 from app.models.schemas import MigrationRequest, SSHAuth
-
-
-@dataclass
-class GateState:
-    source_ok: bool = False
-    destination_ok: bool = False
-    source_ts: float = 0.0
-    destination_ts: float = 0.0
 
 
 class ConnectivityGate:
     def __init__(self, ttl_seconds: int = 1800) -> None:
         self._ttl = ttl_seconds
-        self._state: dict[str, GateState] = {}
+        self._source_state: dict[str, float] = {}
+        self._destination_state: dict[str, float] = {}
         self._lock = threading.Lock()
 
     def _fingerprint_auth(self, auth: SSHAuth) -> str:
-        pwd = auth.password or ""
-        key = auth.private_key or ""
+        pwd = (auth.password or "").strip()
+        key = (auth.private_key or "").strip()
         secret_hash = hashlib.sha256(f"{pwd}|{key}".encode("utf-8")).hexdigest()
-        return f"{auth.host}:{auth.port}:{auth.username}:{auth.sudo}:{secret_hash}"
+        basis = f"{auth.host.strip()}:{auth.port}:{auth.username.strip()}:{auth.sudo}:{secret_hash}"
+        return hashlib.sha256(basis.encode("utf-8")).hexdigest()
 
-    def migration_key(self, req: MigrationRequest) -> str:
-        src = self._fingerprint_auth(req.source)
-        dst = self._fingerprint_auth(req.destination)
-        return hashlib.sha256(f"{src}::{dst}".encode("utf-8")).hexdigest()
-
-    def mark_source(self, req: MigrationRequest) -> None:
-        self._mark(self.migration_key(req), "source")
-
-    def mark_destination(self, req: MigrationRequest) -> None:
-        self._mark(self.migration_key(req), "destination")
-
-    def _mark(self, key: str, side: str) -> None:
-        now = time.time()
+    def mark_source(self, auth: SSHAuth) -> None:
         with self._lock:
-            state = self._state.setdefault(key, GateState())
-            if side == "source":
-                state.source_ok = True
-                state.source_ts = now
-            else:
-                state.destination_ok = True
-                state.destination_ts = now
+            self._source_state[self._fingerprint_auth(auth)] = time.time()
+
+    def mark_destination(self, auth: SSHAuth) -> None:
+        with self._lock:
+            self._destination_state[self._fingerprint_auth(auth)] = time.time()
+
+    def _is_valid(self, state: dict[str, float], key: str, now: float) -> bool:
+        ts = state.get(key)
+        if ts is None:
+            return False
+        if now - ts > self._ttl:
+            state.pop(key, None)
+            return False
+        return True
 
     def validate(self, req: MigrationRequest) -> tuple[bool, str]:
-        key = self.migration_key(req)
         now = time.time()
+        source_key = self._fingerprint_auth(req.source)
+        destination_key = self._fingerprint_auth(req.destination)
         with self._lock:
-            state = self._state.get(key)
-            if not state:
-                return False, "Connectivity tests missing for source and destination"
+            source_ok = self._is_valid(self._source_state, source_key, now)
+            destination_ok = self._is_valid(self._destination_state, destination_key, now)
 
-            if state.source_ok and now - state.source_ts > self._ttl:
-                state.source_ok = False
-            if state.destination_ok and now - state.destination_ts > self._ttl:
-                state.destination_ok = False
-
-            if not state.source_ok and not state.destination_ok:
+            if not source_ok and not destination_ok:
                 return False, "Both connectivity tests are required before migration"
-            if not state.source_ok:
+            if not source_ok:
                 return False, "Source connectivity test is required before migration"
-            if not state.destination_ok:
+            if not destination_ok:
                 return False, "Destination connectivity test is required before migration"
 
             return True, "OK"

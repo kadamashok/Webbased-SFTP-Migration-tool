@@ -58,7 +58,7 @@ class MigrationService:
                 access = "sudo"
 
             if access == "denied":
-                raise SSHCommandError("Connected over SSH but root/sudo validation failed")
+                raise SSHCommandError("SSH access validation failed. Use root or passwordless sudo.")
 
             os_line = next(
                 (line for line in os_release.splitlines() if line.startswith("PRETTY_NAME=")),

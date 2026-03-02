@@ -2,28 +2,22 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class SSHAuth(BaseModel):
-    host: str = Field(..., min_length=1)
+    host: str = ""
     port: int = Field(22, ge=1, le=65535)
-    username: str = Field(..., min_length=1)
+    username: str = ""
     password: Optional[str] = None
     private_key: Optional[str] = None
     sudo: bool = True
-
-    @model_validator(mode="after")
-    def validate_auth(self) -> "SSHAuth":
-        if not self.password and not self.private_key:
-            raise ValueError("Either password or private_key must be provided")
-        return self
 
 
 class MigrationRequest(BaseModel):
     source: SSHAuth
     destination: SSHAuth
-    sftp_group: str = Field("sftpusers", min_length=1)
+    sftp_group: str = "sftpusers"
     incremental: bool = True
     rsync_delete: bool = False
     sample_sftp_user: Optional[str] = None
