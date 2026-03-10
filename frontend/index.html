@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -109,6 +109,52 @@
       font-size: 0.84rem;
       padding: 10px 8px 14px;
     }
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin: 14px 0 10px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      min-width: auto;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: #111827;
+      color: #e5e7eb;
+      border: 1px solid #111827;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+    }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      background: #fff;
+      min-width: 980px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #f3f4f6;
+      z-index: 1;
+      font-weight: 700;
+      color: #111827;
+      white-space: nowrap;
+    }
     @media (max-width: 900px) {
       .panels { grid-template-columns: 1fr; }
       .grid { grid-template-columns: 1fr; }
@@ -122,7 +168,7 @@
 <body>
   <header class="header">
     <img src="/static/croma-logo.png" alt="Croma Logo" class="brand-logo" />
-    <div class="brand-title">Croma – SFTP Migration Tool</div>
+    <div class="brand-title">Croma - SFTP Migration Tool</div>
   </header>
   <div class="container">
     <div class="panels">
@@ -159,39 +205,102 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2>Migration Options</h2>
-      <div class="grid" style="grid-template-columns: repeat(4, minmax(180px, 1fr));">
-        <div><label>SFTP Group</label><input id="sftp_group" value="sftpusers" /></div>
-        <div><label>Incremental Sync</label><select id="incremental"><option value="true">Yes</option><option value="false">No</option></select></div>
-        <div><label>Delete Extra Files on Destination</label><select id="rsync_delete"><option value="false">No</option><option value="true">Yes</option></select></div>
-        <div><label>Sample SFTP User (optional)</label><input id="sample_user" /></div>
-      </div>
-      <div class="actions-row">
-        <button class="secondary" onclick="runDry()">Dry Run Migration</button>
-        <button class="warn" id="start_btn" onclick="runMigration()" disabled>Start Migration</button>
-      </div>
-      <div id="status" class="status">Run SOURCE and DESTINATION connectivity tests first.</div>
+    <div class="tabs">
+      <button class="tab-btn active" id="tabbtn_migration" onclick="showTab('migration')">Migration</button>
+      <button class="tab-btn" id="tabbtn_scripts" onclick="showTab('scripts')">Scripts / Cron Jobs</button>
     </div>
 
-    <div class="card">
-      <label>Progress</label>
-      <div class="progress"><div class="bar" id="bar"></div></div>
-      <div id="detail" style="margin-top:8px;font-size:.9rem;"></div>
-      <label style="margin-top:10px;">Live Logs</label>
-      <pre id="logs"></pre>
+    <div id="tab_migration">
+      <div class="card">
+        <h2>Migration Options</h2>
+        <div class="grid" style="grid-template-columns: repeat(4, minmax(180px, 1fr));">
+          <div><label>SFTP Group</label><input id="sftp_group" value="sftpusers" /></div>
+          <div><label>Incremental Sync</label><select id="incremental"><option value="true">Yes</option><option value="false">No</option></select></div>
+          <div><label>Delete Extra Files on Destination</label><select id="rsync_delete"><option value="false">No</option><option value="true">Yes</option></select></div>
+          <div><label>Sample SFTP User (optional)</label><input id="sample_user" /></div>
+        </div>
+        <div class="actions-row">
+          <button class="secondary" onclick="runDry()">Dry Run Migration</button>
+          <button class="warn" id="start_btn" onclick="runMigration()" disabled>Start Migration</button>
+        </div>
+        <div id="status" class="status">Run SOURCE and DESTINATION connectivity tests first.</div>
+      </div>
+
+      <div class="card">
+        <label>Progress</label>
+        <div class="progress"><div class="bar" id="bar"></div></div>
+        <div id="detail" style="margin-top:8px;font-size:.9rem;"></div>
+        <label style="margin-top:10px;">Live Logs</label>
+        <pre id="logs"></pre>
+      </div>
+    </div>
+
+    <div id="tab_scripts" style="display:none;">
+      <div class="card">
+        <h2>Scripts & Cron Job Discovery</h2>
+        <div class="actions-row">
+          <button class="secondary" onclick="scanScripts()">Dry Run â€“ Check Scripts & Cron Jobs</button>
+          <button class="warn" id="migrate_scripts_btn" onclick="migrateScriptsCron()" disabled>Migrate Scripts & Cron Jobs</button>
+        </div>
+        <div id="scripts_status" class="status"></div>
+        <div id="scripts_summary" class="summary"></div>
+      </div>
+
+      <div class="card">
+        <h2>Discovery Results</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Script Path</th>
+                <th>Owner</th>
+                <th>Cron Schedule</th>
+                <th>Command</th>
+                <th>Dependencies</th>
+                <th>Uses SSH/SFTP</th>
+                <th>Uses Private Key</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="scripts_tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
   <footer class="footer">Developed by Ashok Kadam using AI</footer>
 
 <script>
-const API = "http://127.0.0.1:8001";
+const DEFAULT_API = "http://127.0.0.1:8001";
+const apiParam = new URLSearchParams(window.location.search).get("api");
+const API = (apiParam ? apiParam : DEFAULT_API).replace(/\/+$/, "");
 let polling = null;
 let sourceOk = false;
 let destinationOk = false;
 
 function updateStartButton() {
   document.getElementById("start_btn").disabled = !(sourceOk && destinationOk);
+  const migBtn = document.getElementById("migrate_scripts_btn");
+  if (migBtn) migBtn.disabled = !(sourceOk && destinationOk);
+}
+
+function showTab(name) {
+  const mig = document.getElementById("tab_migration");
+  const scr = document.getElementById("tab_scripts");
+  const bm = document.getElementById("tabbtn_migration");
+  const bs = document.getElementById("tabbtn_scripts");
+
+  if (name === "scripts") {
+    mig.style.display = "none";
+    scr.style.display = "block";
+    bm.classList.remove("active");
+    bs.classList.add("active");
+  } else {
+    mig.style.display = "block";
+    scr.style.display = "none";
+    bs.classList.remove("active");
+    bm.classList.add("active");
+  }
 }
 
 function payload() {
@@ -298,6 +407,128 @@ function setSummary(id, data) {
     "Disk:",
     data.disk_summary
   ].join("\n");
+}
+
+function setScriptsStatus(msg, ok=null) {
+  const el = document.getElementById("scripts_status");
+  if (!el) return;
+  el.textContent = msg || "";
+  if (ok === null) {
+    el.className = "status";
+  } else {
+    el.className = `status ${ok ? "ok" : "err"}`;
+  }
+}
+
+function setScriptsSummary(text) {
+  const el = document.getElementById("scripts_summary");
+  if (!el) return;
+  el.textContent = text || "";
+}
+
+function renderScriptsTable(rows) {
+  const body = document.getElementById("scripts_tbody");
+  if (!body) return;
+  body.innerHTML = "";
+
+  if (!rows || rows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 8;
+    td.textContent = "No scripts or cron jobs discovered.";
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+
+    const tdPath = document.createElement("td");
+    if (r.script_path) {
+      const code = document.createElement("code");
+      code.textContent = r.script_path;
+      tdPath.appendChild(code);
+    }
+    tr.appendChild(tdPath);
+
+    const tdOwner = document.createElement("td");
+    tdOwner.textContent = r.owner || "";
+    tr.appendChild(tdOwner);
+
+    const tdSch = document.createElement("td");
+    tdSch.textContent = r.cron_schedule || "";
+    tr.appendChild(tdSch);
+
+    const tdCmd = document.createElement("td");
+    tdCmd.textContent = r.command || "";
+    tr.appendChild(tdCmd);
+
+    const tdDeps = document.createElement("td");
+    tdDeps.textContent = (r.dependencies || []).join(", ");
+    tr.appendChild(tdDeps);
+
+    const tdSSH = document.createElement("td");
+    tdSSH.textContent = r.uses_ssh_sftp ? "Yes" : "No";
+    tr.appendChild(tdSSH);
+
+    const tdKey = document.createElement("td");
+    tdKey.textContent = r.uses_private_key ? "Yes" : "No";
+    tr.appendChild(tdKey);
+
+    const tdNotes = document.createElement("td");
+    tdNotes.textContent = r.notes || "";
+    tr.appendChild(tdNotes);
+
+    body.appendChild(tr);
+  }
+}
+
+async function scanScripts() {
+  try {
+    setScriptsStatus("Scanning scripts and cron jobs on source...");
+    setScriptsSummary("");
+    renderScriptsTable([]);
+
+    const data = await call("/scan-scripts", "POST", payload());
+    setScriptsStatus(
+      `Discovery completed. Cron jobs: ${data.cron_jobs_discovered}, Scripts: ${data.scripts_discovered}`,
+      true
+    );
+
+    const warnings = (data.warnings || []).slice(0, 50).join("\n");
+    setScriptsSummary(
+      `Keys detected: ${data.keys_detected}\n` +
+      (warnings ? `\nWarnings:\n${warnings}\n` : "")
+    );
+    renderScriptsTable(data.rows || []);
+  } catch (e) {
+    setScriptsStatus(`Scan failed: ${e.message}`, false);
+  }
+}
+
+async function migrateScriptsCron() {
+  try {
+    setScriptsStatus("Migrating scripts and recreating cron jobs on destination...");
+    setScriptsSummary("");
+
+    const data = await call("/migrate-scripts", "POST", payload());
+    setScriptsStatus(
+      `Migration completed. Scripts copied: ${data.scripts_copied}, Crontabs updated: ${data.user_crontabs_updated}`,
+      true
+    );
+
+    const warnings = (data.warnings || []).slice(0, 100).join("\n");
+    setScriptsSummary(
+      `Total cron jobs discovered: ${data.cron_jobs_discovered}\n` +
+      `Scripts copied: ${data.scripts_copied}\n` +
+      `Keys detected: ${data.keys_detected}\n` +
+      `System cron files written: ${data.system_cron_files_written}\n` +
+      (warnings ? `\nWarnings:\n${warnings}\n` : "")
+    );
+  } catch (e) {
+    setScriptsStatus(`Migration failed: ${e.message}`, false);
+  }
 }
 
 async function testSource() {
