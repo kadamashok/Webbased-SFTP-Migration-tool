@@ -46,3 +46,9 @@ class JobStatusResponse(BaseModel):
 class JobLogsResponse(BaseModel):
     job_id: str
     logs: list[str]
+
+
+class DiscoveryRequest(BaseModel):
+    source: SSHAuth
+    sftp_group: str = "sftpusers"
+    max_scripts: int = Field(800, ge=50, le=5000)

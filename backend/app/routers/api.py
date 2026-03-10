@@ -3,10 +3,12 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
     ConnectivityResponse,
+    DiscoveryRequest,
     JobLogsResponse,
     JobStartResponse,
     JobStatusResponse,
@@ -21,6 +23,12 @@ from app.services.cron_script_discovery import (
     discover_scripts,
     migrate_scripts,
     recreate_cron_jobs,
+)
+from app.services.discovery_engine import (
+    get_last_report as get_discovery_last_report,
+    report_to_csv as discovery_report_to_csv,
+    run_full_discovery,
+    set_last_report as set_discovery_last_report,
 )
 from app.services.ssh_client import (
     SSHAuthError,
@@ -304,3 +312,41 @@ def migrate_scripts_and_cron(req: MigrationRequest) -> dict:
             }
     except Exception as exc:
         _raise_friendly_ssh_error(exc)
+
+
+@router.post("/discovery/run")
+def discovery_run(req: DiscoveryRequest) -> dict:
+    # Read-only discovery. Never writes to source.
+    try:
+        source_auth = _build_auth(req.source.model_dump(), "Source")
+        report = run_full_discovery(
+            source_auth,
+            sftp_group=req.sftp_group,
+            max_scripts=req.max_scripts,
+        )
+        set_discovery_last_report(report)
+        return report
+    except Exception as exc:
+        _raise_friendly_ssh_error(exc)
+
+
+@router.get("/discovery/report")
+def discovery_report(format: str = "json") -> Response:
+    report = get_discovery_last_report()
+    if not report:
+        raise HTTPException(status_code=404, detail="No discovery report available. Run discovery first.")
+
+    ts = report.get("generated_at", "report").replace(":", "-")
+    if format.lower() == "csv":
+        csv_text = discovery_report_to_csv(report)
+        return Response(
+            content=csv_text,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename=\"discovery-report-{ts}.csv\"'},
+        )
+
+    # default json
+    return JSONResponse(
+        content=report,
+        headers={"Content-Disposition": f'attachment; filename=\"discovery-report-{ts}.json\"'},
+    )

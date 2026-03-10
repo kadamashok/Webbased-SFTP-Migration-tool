@@ -208,6 +208,7 @@
     <div class="tabs">
       <button class="tab-btn active" id="tabbtn_migration" onclick="showTab('migration')">Migration</button>
       <button class="tab-btn" id="tabbtn_scripts" onclick="showTab('scripts')">Scripts / Cron Jobs</button>
+      <button class="tab-btn" id="tabbtn_discovery" onclick="showTab('discovery')">Discovery</button>
     </div>
 
     <div id="tab_migration">
@@ -239,7 +240,7 @@
       <div class="card">
         <h2>Scripts & Cron Job Discovery</h2>
         <div class="actions-row">
-          <button class="secondary" onclick="scanScripts()">Dry Run â€“ Check Scripts & Cron Jobs</button>
+          <button class="secondary" onclick="scanScripts()">Dry Run - Check Scripts & Cron Jobs</button>
           <button class="warn" id="migrate_scripts_btn" onclick="migrateScriptsCron()" disabled>Migrate Scripts & Cron Jobs</button>
         </div>
         <div id="scripts_status" class="status"></div>
@@ -267,6 +268,113 @@
         </div>
       </div>
     </div>
+
+    <div id="tab_discovery" style="display:none;">
+      <div class="card">
+        <h2>SFTP Discovery Engine</h2>
+        <div class="grid" style="grid-template-columns: repeat(3, minmax(180px, 1fr));">
+          <div><label>SFTP Group</label><input id="discovery_sftp_group" value="sftpusers" /></div>
+          <div><label>Max Scripts (cap)</label><input id="discovery_max_scripts" value="800" /></div>
+          <div>
+            <label>Export Format</label>
+            <select id="discovery_export_format">
+              <option value="json">JSON</option>
+              <option value="csv">CSV</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions-row" style="margin-top:12px;">
+          <button class="secondary" id="run_discovery_btn" onclick="runDiscovery()" disabled>Run Full Discovery</button>
+          <button class="warn" id="export_discovery_btn" onclick="exportDiscoveryReport()" disabled>Export Discovery Report</button>
+        </div>
+        <div id="discovery_status" class="status"></div>
+        <div id="discovery_summary" class="summary"></div>
+      </div>
+
+      <div class="card">
+        <h2>Cron Jobs</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Scope</th>
+                <th>Owner</th>
+                <th>Schedule</th>
+                <th>Command</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="discovery_cron_tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Scripts</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Owner</th>
+                <th>Schedule</th>
+                <th>Command</th>
+                <th>Uses SSH</th>
+                <th>Uses SFTP</th>
+                <th>Uses Key</th>
+                <th>External Host</th>
+              </tr>
+            </thead>
+            <tbody id="discovery_scripts_tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>External Integrations</h2>
+        <div class="table-wrap">
+          <table style="min-width: 720px;">
+            <thead>
+              <tr>
+                <th>External Host</th>
+                <th>Referenced In</th>
+              </tr>
+            </thead>
+            <tbody id="discovery_hosts_tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>SSH Keys</h2>
+        <div class="table-wrap">
+          <table style="min-width: 720px;">
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Referenced In</th>
+              </tr>
+            </thead>
+            <tbody id="discovery_keys_tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Dependencies</h2>
+        <div class="table-wrap">
+          <table style="min-width: 720px;">
+            <thead>
+              <tr>
+                <th>Dependency</th>
+                <th>Referenced In</th>
+              </tr>
+            </thead>
+            <tbody id="discovery_deps_tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
   <footer class="footer">Developed by Ashok Kadam using AI</footer>
 
@@ -277,29 +385,37 @@ const API = (apiParam ? apiParam : DEFAULT_API).replace(/\/+$/, "");
 let polling = null;
 let sourceOk = false;
 let destinationOk = false;
+let discoveryReport = null;
 
 function updateStartButton() {
   document.getElementById("start_btn").disabled = !(sourceOk && destinationOk);
   const migBtn = document.getElementById("migrate_scripts_btn");
   if (migBtn) migBtn.disabled = !(sourceOk && destinationOk);
+
+  const runBtn = document.getElementById("run_discovery_btn");
+  if (runBtn) runBtn.disabled = !sourceOk;
+  const exportBtn = document.getElementById("export_discovery_btn");
+  if (exportBtn) exportBtn.disabled = !discoveryReport;
 }
 
 function showTab(name) {
-  const mig = document.getElementById("tab_migration");
-  const scr = document.getElementById("tab_scripts");
-  const bm = document.getElementById("tabbtn_migration");
-  const bs = document.getElementById("tabbtn_scripts");
+  const tabs = [
+    ["migration", "tab_migration", "tabbtn_migration"],
+    ["scripts", "tab_scripts", "tabbtn_scripts"],
+    ["discovery", "tab_discovery", "tabbtn_discovery"]
+  ];
 
-  if (name === "scripts") {
-    mig.style.display = "none";
-    scr.style.display = "block";
-    bm.classList.remove("active");
-    bs.classList.add("active");
-  } else {
-    mig.style.display = "block";
-    scr.style.display = "none";
-    bs.classList.remove("active");
-    bm.classList.add("active");
+  for (const [key, panelId, btnId] of tabs) {
+    const panel = document.getElementById(panelId);
+    const btn = document.getElementById(btnId);
+    if (!panel || !btn) continue;
+    if (key === name) {
+      panel.style.display = "block";
+      btn.classList.add("active");
+    } else {
+      panel.style.display = "none";
+      btn.classList.remove("active");
+    }
   }
 }
 
@@ -529,6 +645,236 @@ async function migrateScriptsCron() {
   } catch (e) {
     setScriptsStatus(`Migration failed: ${e.message}`, false);
   }
+}
+
+function setDiscoveryStatus(msg, ok=null) {
+  const el = document.getElementById("discovery_status");
+  if (!el) return;
+  el.textContent = msg || "";
+  if (ok === null) {
+    el.className = "status";
+  } else {
+    el.className = `status ${ok ? "ok" : "err"}`;
+  }
+}
+
+function setDiscoverySummary(text) {
+  const el = document.getElementById("discovery_summary");
+  if (!el) return;
+  el.textContent = text || "";
+}
+
+function clearTbody(id, emptyText) {
+  const body = document.getElementById(id);
+  if (!body) return;
+  body.innerHTML = "";
+  const tr = document.createElement("tr");
+  const td = document.createElement("td");
+  td.colSpan = 8;
+  td.textContent = emptyText || "";
+  tr.appendChild(td);
+  body.appendChild(tr);
+}
+
+function renderDiscovery(report) {
+  const cronBody = document.getElementById("discovery_cron_tbody");
+  const scrBody = document.getElementById("discovery_scripts_tbody");
+  const hostBody = document.getElementById("discovery_hosts_tbody");
+  const keyBody = document.getElementById("discovery_keys_tbody");
+  const depBody = document.getElementById("discovery_deps_tbody");
+
+  if (cronBody) cronBody.innerHTML = "";
+  if (scrBody) scrBody.innerHTML = "";
+  if (hostBody) hostBody.innerHTML = "";
+  if (keyBody) keyBody.innerHTML = "";
+  if (depBody) depBody.innerHTML = "";
+
+  const cron = report.cron_jobs || [];
+  if (cronBody) {
+    if (cron.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.textContent = "No cron jobs discovered.";
+      tr.appendChild(td);
+      cronBody.appendChild(tr);
+    } else {
+      for (const j of cron) {
+        const tr = document.createElement("tr");
+        for (const v of [j.scope || "", j.owner || "", j.schedule || "", j.command || "", j.source || ""]) {
+          const td = document.createElement("td");
+          td.textContent = v;
+          tr.appendChild(td);
+        }
+        cronBody.appendChild(tr);
+      }
+    }
+  }
+
+  const scripts = report.scripts || [];
+  if (scrBody) {
+    if (scripts.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 8;
+      td.textContent = "No scripts discovered.";
+      tr.appendChild(td);
+      scrBody.appendChild(tr);
+    } else {
+      for (const s of scripts) {
+        const tr = document.createElement("tr");
+
+        const tdPath = document.createElement("td");
+        const code = document.createElement("code");
+        code.textContent = s.path || "";
+        tdPath.appendChild(code);
+        tr.appendChild(tdPath);
+
+        const cols = [
+          s.owner || "",
+          s.schedule || "",
+          s.command || "",
+          s.uses_ssh ? "Yes" : "No",
+          s.uses_sftp ? "Yes" : "No",
+          s.uses_key ? "Yes" : "No",
+          (s.external_hosts || []).slice(0, 3).join(", ")
+        ];
+        for (const v of cols) {
+          const td = document.createElement("td");
+          td.textContent = v;
+          tr.appendChild(td);
+        }
+        scrBody.appendChild(tr);
+      }
+    }
+  }
+
+  const hosts = report.external_hosts || [];
+  if (hostBody) {
+    if (hosts.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 2;
+      td.textContent = "No external hosts detected.";
+      tr.appendChild(td);
+      hostBody.appendChild(tr);
+    } else {
+      for (const h of hosts) {
+        const tr = document.createElement("tr");
+        const tdH = document.createElement("td");
+        tdH.textContent = h.host || "";
+        tr.appendChild(tdH);
+        const tdR = document.createElement("td");
+        tdR.textContent = (h.referenced_in || []).slice(0, 6).join(", ");
+        tr.appendChild(tdR);
+        hostBody.appendChild(tr);
+      }
+    }
+  }
+
+  const keys = report.ssh_keys || [];
+  if (keyBody) {
+    if (keys.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 2;
+      td.textContent = "No key paths detected.";
+      tr.appendChild(td);
+      keyBody.appendChild(tr);
+    } else {
+      for (const k of keys) {
+        const tr = document.createElement("tr");
+        const tdP = document.createElement("td");
+        const code = document.createElement("code");
+        code.textContent = k.path || "";
+        tdP.appendChild(code);
+        tr.appendChild(tdP);
+        const tdR = document.createElement("td");
+        tdR.textContent = (k.referenced_in || []).slice(0, 6).join(", ");
+        tr.appendChild(tdR);
+        keyBody.appendChild(tr);
+      }
+    }
+  }
+
+  const deps = report.dependencies || [];
+  if (depBody) {
+    if (deps.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 2;
+      td.textContent = "No dependencies detected.";
+      tr.appendChild(td);
+      depBody.appendChild(tr);
+    } else {
+      for (const d of deps) {
+        const tr = document.createElement("tr");
+        const tdN = document.createElement("td");
+        tdN.textContent = d.name || "";
+        tr.appendChild(tdN);
+        const tdR = document.createElement("td");
+        tdR.textContent = (d.referenced_in || []).slice(0, 8).join(", ");
+        tr.appendChild(tdR);
+        depBody.appendChild(tr);
+      }
+    }
+  }
+}
+
+function discoveryPayload() {
+  const maxScripts = Number(document.getElementById("discovery_max_scripts").value || "800");
+  return {
+    source: serverPayload("source"),
+    sftp_group: (document.getElementById("discovery_sftp_group").value || "sftpusers").trim(),
+    max_scripts: Number.isFinite(maxScripts) ? maxScripts : 800
+  };
+}
+
+async function runDiscovery() {
+  discoveryReport = null;
+  updateStartButton();
+
+  const validation = validateServerInputs("source");
+  if (validation) {
+    setDiscoveryStatus(`Discovery failed: ${validation}`, false);
+    return;
+  }
+
+  try {
+    setDiscoveryStatus("Running full discovery on source... (read-only)");
+    setDiscoverySummary("");
+    renderDiscovery({cron_jobs: [], scripts: [], external_hosts: [], ssh_keys: [], dependencies: []});
+
+    const data = await call("/discovery/run", "POST", discoveryPayload());
+    discoveryReport = data;
+    updateStartButton();
+
+    const c = data.counts || {};
+    const warnings = (data.warnings || []).slice(0, 50).join("\n");
+    setDiscoveryStatus(
+      `Discovery completed. Cron jobs: ${c.cron_jobs || 0}, Scripts: ${c.unique_scripts || 0}, External hosts: ${c.external_hosts || 0}`,
+      true
+    );
+    setDiscoverySummary(
+      `Generated at: ${data.generated_at}\n` +
+      `Systemd timers: ${c.systemd_timers || 0}\n` +
+      `Services: ${c.services || 0}\n` +
+      (warnings ? `\nWarnings:\n${warnings}\n` : "")
+    );
+    renderDiscovery(data);
+  } catch (e) {
+    setDiscoveryStatus(`Discovery failed: ${e.message}`, false);
+  }
+}
+
+function exportDiscoveryReport() {
+  if (!discoveryReport) {
+    setDiscoveryStatus("No report available. Run discovery first.", false);
+    return;
+  }
+  const fmt = (document.getElementById("discovery_export_format").value || "json").toLowerCase();
+  const url = `${API}/discovery/report?format=${encodeURIComponent(fmt)}`;
+  window.open(url, "_blank");
 }
 
 async function testSource() {

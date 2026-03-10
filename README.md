@@ -15,6 +15,7 @@ Internal web tool to migrate SFTP workloads from Oracle Linux (source) to RHEL 9
 - Migrates SFTP users, groups, UID/GID, password hashes, SSH keys, data, and SFTP/sshd configuration.
 - Applies RHEL 9 SELinux adjustments and performs post-migration validation.
 - Provides live migration status and logs in a single-page UI.
+- Provides a read-only discovery engine to enumerate integrations (cron/scripts/systemd/external hosts) before migration.
 
 ## Key Features
 
@@ -60,6 +61,17 @@ Migration (writes only to destination):
   - Script is executable
   - Dependencies (`ssh`, `sftp`, `scp`, `curl`, `wget`) are present when referenced
 
+## Discovery Engine (Read-Only)
+
+The `Discovery` tab runs a full, read-only scan against the source server to provide visibility before any migration:
+
+- Cron jobs (user + system)
+- Scripts in common automation directories
+- Script content analysis (ssh/sftp/scp/ftp/curl/wget)
+- Key path references (paths only, never key contents)
+- External hosts (IPs/hostnames)
+- Systemd timers and services
+
 ## API
 
 - `POST /test/source`
@@ -71,6 +83,8 @@ Migration (writes only to destination):
 - `GET /migration/{job_id}/report`
 - `POST /scan-scripts`
 - `POST /migrate-scripts`
+- `POST /discovery/run`
+- `GET /discovery/report?format=json|csv`
 - `GET /health`
 
 ## Mandatory Connectivity Gate
