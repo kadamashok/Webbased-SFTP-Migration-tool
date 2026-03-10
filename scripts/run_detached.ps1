@@ -43,27 +43,12 @@ $frontendPort = Get-FreePort -StartPort $FrontendStartPort
 
 & $py (Join-Path $root "scripts\\setup_assets.py") | Out-Null
 
-$backendArgs = @(
-  "-m", "uvicorn", "app.main:app",
-  "--host", $BindHost,
-  "--port", "$backendPort"
-)
-Start-Process `
-  -FilePath $py `
-  -ArgumentList $backendArgs `
-  -WorkingDirectory (Join-Path $root "backend") `
-  -RedirectStandardOutput (Join-Path $root "backend_stdout.log") `
-  -RedirectStandardError (Join-Path $root "backend_stderr.log") `
-  | Out-Null
+$backendCmd = Join-Path $root "scripts\\serve_backend.cmd"
+$frontendCmd = Join-Path $root "scripts\\serve_frontend.cmd"
 
-$frontendArgs = @("-m", "http.server", "$frontendPort", "--bind", $BindHost)
-Start-Process `
-  -FilePath $py `
-  -ArgumentList $frontendArgs `
-  -WorkingDirectory (Join-Path $root "frontend") `
-  -RedirectStandardOutput (Join-Path $root "frontend_stdout.log") `
-  -RedirectStandardError (Join-Path $root "frontend_stderr.log") `
-  | Out-Null
+# Use cmd.exe "start" to break away from the current process/job so the servers keep running.
+Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "start", '""', "/min", $backendCmd, $BindHost, "$backendPort") -WorkingDirectory $root | Out-Null
+Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "start", '""', "/min", $frontendCmd, $BindHost, "$frontendPort") -WorkingDirectory $root | Out-Null
 
 # Give the servers a moment to bind, then record listener PIDs.
 $backendPid = $null

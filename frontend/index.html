@@ -284,7 +284,7 @@
           </div>
         </div>
         <div class="actions-row" style="margin-top:12px;">
-          <button class="secondary" id="run_discovery_btn" onclick="runDiscovery()" disabled>Run Full Discovery</button>
+          <button class="secondary" id="run_discovery_btn" onclick="runDiscovery()">Run Full Discovery</button>
           <button class="warn" id="export_discovery_btn" onclick="exportDiscoveryReport()" disabled>Export Discovery Report</button>
         </div>
         <div id="discovery_status" class="status"></div>
@@ -393,7 +393,7 @@ function updateStartButton() {
   if (migBtn) migBtn.disabled = !(sourceOk && destinationOk);
 
   const runBtn = document.getElementById("run_discovery_btn");
-  if (runBtn) runBtn.disabled = !sourceOk;
+  if (runBtn) runBtn.disabled = validateServerInputs("source") !== "";
   const exportBtn = document.getElementById("export_discovery_btn");
   if (exportBtn) exportBtn.disabled = !discoveryReport;
 }
@@ -978,6 +978,33 @@ async function poll(jobId) {
     }
   }
 }
+
+function init() {
+  const ids = [
+    "src_host",
+    "src_port",
+    "src_user",
+    "src_pass",
+    "src_key",
+    "dst_host",
+    "dst_port",
+    "dst_user",
+    "dst_pass",
+    "dst_key",
+    "discovery_sftp_group",
+    "discovery_max_scripts",
+    "discovery_export_format"
+  ];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.addEventListener("input", updateStartButton);
+    el.addEventListener("change", updateStartButton);
+  }
+  updateStartButton();
+}
+
+init();
 </script>
 </body>
 </html>
